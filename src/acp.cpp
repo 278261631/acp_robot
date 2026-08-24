@@ -1,4 +1,5 @@
 #include "acp.h"
+#include "config.h"
 
 #include <tlhelp32.h>
 #include <cwctype>
@@ -60,17 +61,21 @@ BOOL CALLBACK enum_top(HWND h, LPARAM l) {
     DWORD pid = 0;
     GetWindowThreadProcessId(h, &pid);
     if (pid != ctx->pid) return TRUE;
-    if (!class_is(h, L"ThunderRT6FormDC")) return TRUE;
+    if (!class_is(h, g_cfg.formClass.c_str())) return TRUE;
     std::wstring title = get_text(h);
-    if (title.find(L"Observatory") != std::wstring::npos) { ctx->form = h; return FALSE; }
-    if (title.find(L"Nudge") != std::wstring::npos) return TRUE;
-    if (!ctx->form) ctx->form = h;
+    if (g_cfg.formTitle.empty()) {
+        if (IsWindowVisible(h)) { ctx->form = h; return FALSE; }
+        if (!ctx->form) ctx->form = h;
+        return TRUE;
+    }
+    if (iequals(title, g_cfg.formTitle)) { ctx->form = h; return FALSE; }
+    if (title.find(g_cfg.formTitle) != std::wstring::npos && !ctx->form) ctx->form = h;
     return TRUE;
 }
 
 BOOL CALLBACK enum_btn(HWND h, LPARAM l) {
     auto* v = reinterpret_cast<std::vector<AcpButton>*>(l);
-    if (class_is(h, L"ThunderRT6CommandButton")) {
+    if (class_is(h, g_cfg.buttonClass.c_str())) {
         AcpButton b;
         b.hwnd = h;
         b.label = get_text(h);
@@ -93,7 +98,7 @@ DWORD FindPid() {
     pe.dwSize = sizeof(pe);
     if (Process32FirstW(snap, &pe)) {
         do {
-            if (_wcsicmp(pe.szExeFile, L"acp.exe") == 0) { pid = pe.th32ProcessID; break; }
+            if (_wcsicmp(pe.szExeFile, g_cfg.processName.c_str()) == 0) { pid = pe.th32ProcessID; break; }
         } while (Process32NextW(snap, &pe));
     }
     CloseHandle(snap);

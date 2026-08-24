@@ -2,6 +2,7 @@
 
 #include "acp.h"
 #include "commands.h"
+#include "config.h"
 
 #include <shellapi.h>
 #include <string>
@@ -54,9 +55,9 @@ static void AddTray();
 static void RefreshUi() {
     SetWindowTextW(g.hStatus, acp::StatusLine().c_str());
 
-    for (int i = 0; i < kTrackedButtonCount; ++i) {
+    for (int i = 0; i < TrackedCount(); ++i) {
         AcpButton b;
-        bool found = acp::FindButton(kTrackedButtons[i], &b, true);
+        bool found = acp::FindButton(TrackedLabel(i), &b, true);
         const wchar_t* state = L"not found";
         bool clickable = false;
         if (found) {
@@ -95,10 +96,10 @@ static void OpenAcp() {
             return;
         }
     }
-    const wchar_t* path = L"C:\\Program Files (x86)\\ACP Obs Control\\acp.exe";
-    const wchar_t* dir = L"C:\\Program Files (x86)\\ACP Obs Control";
-    if (GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES)
-        ShellExecuteW(nullptr, L"open", path, nullptr, dir, SW_SHOWNORMAL);
+    const std::wstring& path = g_cfg.exePath;
+    const std::wstring& dir = g_cfg.workingDir;
+    if (!path.empty() && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+        ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL);
 }
 
 static void ExitApp() {
@@ -167,9 +168,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             WS_CHILD | WS_VISIBLE, 10, 10, 540, 20,
             hwnd, (HMENU)(INT_PTR)IDC_STATUS, g.hInst, nullptr);
 
-        for (int i = 0; i < kTrackedButtonCount; ++i) {
+        for (int i = 0; i < TrackedCount(); ++i) {
             int y = 40 + i * 32;
-            g.hLabel[i] = CreateWindowExW(0, L"STATIC", kTrackedButtons[i],
+            g.hLabel[i] = CreateWindowExW(0, L"STATIC", TrackedLabel(i).c_str(),
                 WS_CHILD | WS_VISIBLE, 10, y, 175, 20,
                 hwnd, (HMENU)(INT_PTR)(IDC_BTN_BASE + i), g.hInst, nullptr);
             g.hState[i] = CreateWindowExW(0, L"STATIC", L"...",
@@ -180,7 +181,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 hwnd, (HMENU)(INT_PTR)(IDC_CLICK_BASE + i), g.hInst, nullptr);
         }
 
-        int dumpY = 40 + kTrackedButtonCount * 32;
+        int dumpY = 40 + TrackedCount() * 32;
         g.hDump = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
             10, dumpY, 540, 250,
@@ -196,7 +197,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         HWND all[] = { g.hStatus, g.hDump, g.hOpenAcp, g.hRefresh };
         for (HWND h : all) SendMessageW(h, WM_SETFONT, (WPARAM)g.hFont, TRUE);
-        for (int i = 0; i < kTrackedButtonCount; ++i) {
+        for (int i = 0; i < TrackedCount(); ++i) {
             SendMessageW(g.hLabel[i], WM_SETFONT, (WPARAM)g.hFont, TRUE);
             SendMessageW(g.hState[i], WM_SETFONT, (WPARAM)g.hFont, TRUE);
             SendMessageW(g.hClick[i], WM_SETFONT, (WPARAM)g.hFont, TRUE);
@@ -215,8 +216,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         int id = LOWORD(wp);
         if (id == IDC_REFRESH) { RefreshUi(); return 0; }
         if (id == IDC_OPENACP) { OpenAcp(); RefreshUi(); return 0; }
-        if (id >= IDC_CLICK_BASE && id < IDC_CLICK_BASE + kTrackedButtonCount) {
-            acp::ClickByLabel(kTrackedButtons[id - IDC_CLICK_BASE]);
+        if (id >= IDC_CLICK_BASE && id < IDC_CLICK_BASE + TrackedCount()) {
+            acp::ClickByLabel(TrackedLabel(id - IDC_CLICK_BASE));
             RefreshUi();
             return 0;
         }

@@ -12,6 +12,7 @@ add_executable(acp_robot WIN32
   src/main.cpp
   src/acp.cpp
   src/commands.cpp
+  src/config.cpp
   src/window.cpp
 )
 
