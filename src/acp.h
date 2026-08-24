@@ -19,5 +19,8 @@ bool EnumButtons(std::vector<AcpButton>& out);
 bool FindButton(const std::wstring& label, AcpButton* out, bool fuzzy = false);
 bool Click(HWND hwnd);
 bool ClickByLabel(const std::wstring& label);
+HWND FindAbortDialog();
+HWND FindOkButton(HWND dlg);
+bool ClickOk(HWND dlg);
 std::wstring StatusLine();
 }

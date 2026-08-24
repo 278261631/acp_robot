@@ -54,6 +54,7 @@ struct Ui {
 static Ui g;
 
 static std::vector<std::wstring> g_log;
+static int g_abortClicks = 0;
 
 static void OpenAcp();
 static void RefreshUi();
@@ -62,6 +63,28 @@ static void ShowTrayMenu();
 static void ShowBalloon(const std::wstring& title, const std::wstring& text);
 static void AddTray();
 static void AppendLog(const std::wstring& line);
+static void CheckAbortMonitor();
+
+static std::wstring Hex(HWND h) {
+    wchar_t buf[32] = {};
+    swprintf_s(buf, L"0x%p", h);
+    return buf;
+}
+
+static void CheckAbortMonitor() {
+    HWND dlg = acp::FindAbortDialog();
+    if (!dlg) return;
+    HWND btn = acp::FindOkButton(dlg);
+    if (acp::ClickOk(dlg)) {
+        ++g_abortClicks;
+        std::wstring line = L"abort monitor: clicked OK #" +
+            std::to_wstring(g_abortClicks) + L" on dialog " + Hex(dlg);
+        if (btn) line += L" button " + Hex(btn);
+        AppendLog(line);
+    } else {
+        AppendLog(L"abort monitor: dialog " + Hex(dlg) + L" found but OK button click failed");
+    }
+}
 
 static void AppendLog(const std::wstring& line) {
     g_log.push_back(line);
@@ -250,12 +273,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         SetTimer(hwnd, 1, 1000, nullptr);
+        SetTimer(hwnd, 2, 2000, nullptr);
         RefreshUi();
         return 0;
     }
 
     case WM_TIMER:
         if (wp == 1) RefreshUi();
+        else if (wp == 2) CheckAbortMonitor();
         return 0;
 
     case WM_COMMAND: {
@@ -321,6 +346,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_DESTROY:
         KillTimer(hwnd, 1);
+        KillTimer(hwnd, 2);
         if (g.trayAdded) { Shell_NotifyIconW(NIM_DELETE, &g.nid); g.trayAdded = false; }
         if (g.hFont) { DeleteObject(g.hFont); g.hFont = nullptr; }
         PostQuitMessage(0);

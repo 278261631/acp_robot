@@ -16,6 +16,17 @@ bool iequals(const std::wstring& a, const std::wstring& b) {
     return true;
 }
 
+bool contains_ci(const std::wstring& hay, const std::wstring& needle) {
+    if (needle.empty()) return true;
+    for (size_t i = 0; i + needle.size() <= hay.size(); ++i) {
+        bool m = true;
+        for (size_t j = 0; j < needle.size(); ++j)
+            if (std::towlower(hay[i + j]) != std::towlower(needle[j])) { m = false; break; }
+        if (m) return true;
+    }
+    return false;
+}
+
 std::wstring normalize(const std::wstring& s) {
     std::wstring r;
     r.reserve(s.size());
@@ -83,6 +94,49 @@ BOOL CALLBACK enum_btn(HWND h, LPARAM l) {
         b.enabled = IsWindowEnabled(h) != FALSE;
         v->push_back(b);
     }
+    return TRUE;
+}
+
+struct AbortCtx {
+    DWORD pid;
+    HWND found;
+};
+
+struct TextCtx {
+    bool hit;
+};
+
+BOOL CALLBACK enum_aborttext(HWND h, LPARAM l) {
+    TextCtx* c = reinterpret_cast<TextCtx*>(l);
+    if (contains_ci(get_text(h), L"abort")) { c->hit = true; return FALSE; }
+    return TRUE;
+}
+
+BOOL CALLBACK enum_abort(HWND h, LPARAM l) {
+    AbortCtx* c = reinterpret_cast<AbortCtx*>(l);
+    if (!class_is(h, L"#32770")) return TRUE;
+    if (!IsWindowVisible(h)) return TRUE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != c->pid) return TRUE;
+    if (contains_ci(get_text(h), L"abort")) { c->found = h; return FALSE; }
+    TextCtx tc{ false };
+    EnumChildWindows(h, enum_aborttext, reinterpret_cast<LPARAM>(&tc));
+    if (tc.hit) { c->found = h; return FALSE; }
+    return TRUE;
+}
+
+struct OkCtx {
+    HWND ok;
+    HWND first;
+};
+
+BOOL CALLBACK enum_ok(HWND h, LPARAM l) {
+    OkCtx* c = reinterpret_cast<OkCtx*>(l);
+    if (!class_is(h, L"Button")) return TRUE;
+    if (!c->first) c->first = h;
+    std::wstring n = normalize(get_text(h));
+    if (n == L"确定" || n == L"OK" || n == L"Yes" || n == L"是") { c->ok = h; return FALSE; }
     return TRUE;
 }
 
@@ -156,6 +210,27 @@ bool ClickByLabel(const std::wstring& label) {
     AcpButton b;
     if (!FindButton(label, &b)) return false;
     return Click(b.hwnd);
+}
+
+HWND FindAbortDialog() {
+    DWORD pid = FindPid();
+    if (!pid) return nullptr;
+    AbortCtx ctx{ pid, nullptr };
+    EnumWindows(enum_abort, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.found;
+}
+
+HWND FindOkButton(HWND dlg) {
+    if (!dlg) return nullptr;
+    OkCtx ctx{ nullptr, nullptr };
+    EnumChildWindows(dlg, enum_ok, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.ok ? ctx.ok : ctx.first;
+}
+
+bool ClickOk(HWND dlg) {
+    HWND btn = FindOkButton(dlg);
+    if (!btn || !IsWindowEnabled(btn)) return false;
+    return PostMessageW(btn, BM_CLICK, 0, 0) != FALSE;
 }
 
 std::wstring StatusLine() {
