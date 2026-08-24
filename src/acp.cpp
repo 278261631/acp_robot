@@ -147,8 +147,8 @@ bool Click(HWND hwnd) {
     int cx = (rc.right - rc.left) / 2;
     int cy = (rc.bottom - rc.top) / 2;
     LPARAM lp = MAKELPARAM(cx, cy);
-    SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lp);
-    SendMessageW(hwnd, WM_LBUTTONUP, 0, lp);
+    if (!PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lp)) return false;
+    if (!PostMessageW(hwnd, WM_LBUTTONUP, 0, lp)) return false;
     return true;
 }
 
