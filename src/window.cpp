@@ -297,8 +297,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             switch (idx) {
             case 0: RunSelectScript(g_cfg.scriptFile, r); break;
             case 1: RunRunFile(g_cfg.runFile, r); break;
+            case 2: RunAbort(r); break;
             default: acp::ClickByLabel(TrackedLabel(idx)); break;
             }
+            if (idx == 2) AppendLog(r);
             RefreshUi();
             return 0;
         }

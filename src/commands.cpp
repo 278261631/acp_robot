@@ -155,6 +155,50 @@ bool RunRunOpen(std::wstring& result) {
     return true;
 }
 
+bool RunAbort(std::wstring& result) {
+    result.clear();
+
+    HWND form = acp::FindFormWindow();
+    AcpButton b;
+    if (!acp::FindButton(g_cfg.btnAbort, &b)) {
+        result = L"abort FAIL: abort button not found. Lookup: class='" + g_cfg.buttonClass +
+                 L"', label='" + g_cfg.btnAbort + L"'";
+        return false;
+    }
+    if (!b.visible || !b.enabled) {
+        result = L"abort FAIL: abort button " + Hex(b.hwnd) + L" not clickable (visible=" +
+                 (b.visible ? L"yes" : L"no") + L", enabled=" + (b.enabled ? L"yes" : L"no") + L")";
+        return false;
+    }
+    if (!acp::Click(b.hwnd)) {
+        result = L"abort FAIL: click message failed on abort button " + Hex(b.hwnd);
+        return false;
+    }
+
+    int timeout = g_cfg.abortTimeoutMs;
+    int step = 250;
+    int waited = 0;
+    while (waited < timeout) {
+        Sleep(step);
+        waited += step;
+        if (!acp::IsRunning()) {
+            result = L"abort OK: clicked abort button " + Hex(b.hwnd) +
+                     L", ACP exited after " + std::to_wstring(waited) + L"ms";
+            return true;
+        }
+        AcpButton cur;
+        if (acp::FindButton(g_cfg.btnAbort, &cur) && !cur.enabled) {
+            result = L"abort OK: clicked abort button " + Hex(b.hwnd) +
+                     L", abort button disabled after " + std::to_wstring(waited) + L"ms";
+            return true;
+        }
+    }
+    result = L"abort FAIL: abort button still enabled after " +
+             std::to_wstring(timeout) + L"ms (form " +
+             (form ? Hex(form) : std::wstring(L"(none)")) + L")";
+    return false;
+}
+
 bool ExecuteCommand(const std::wstring& verb, const std::wstring& arg, std::wstring& result) {
     result.clear();
 
@@ -169,11 +213,7 @@ bool ExecuteCommand(const std::wstring& verb, const std::wstring& arg, std::wstr
     } else if (verb == L"run-open" || verb == L"run-3") {
         return RunRunOpen(result);
     } else if (verb == L"abort") {
-        if (!acp::ClickByLabel(g_cfg.btnAbort)) {
-            result = L"button not found or disabled: '" + g_cfg.btnAbort + L"'";
-            return false;
-        }
-        result = L"clicked: " + g_cfg.btnAbort;
+        return RunAbort(result);
     } else if (verb == L"alert") {
         if (!acp::ClickByLabel(g_cfg.btnAlert)) {
             result = L"button not found or disabled: '" + g_cfg.btnAlert + L"'";
@@ -267,6 +307,7 @@ bool ExecuteCommand(const std::wstring& verb, const std::wstring& arg, std::wstr
                  L"  --run-click             step1: click Run, verify the file dialog appears\r\n"
                  L"  --run-fill              step2: find the filename edit, fill run_file\r\n"
                  L"  --run-open              step3: click Open in the file dialog\r\n"
+                 L"  --abort                 click Abort, wait for it to disable (timeout: abort_timeout_ms, default 30000)\r\n"
                  L"  --dialog-set <path>     set file name in the open dialog\r\n"
                  L"  --dialog-open           click Open in the open dialog\r\n"
                  L"  --dialog-cancel         click Cancel in the open dialog\r\n"

@@ -19,6 +19,7 @@ struct Config {
     std::wstring runFile = L"C:\\Users\\Administrator\\Documents\\ACP Astronomy\\Plans\\1.txt";
 
     int refreshMs = 1000;
+    int abortTimeoutMs = 30000;
 
     std::wstring configPath;
 };

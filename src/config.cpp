@@ -84,6 +84,9 @@ static void Apply(Config& cfg, const std::wstring& key, const std::wstring& val)
     else if (key == L"refresh_ms") {
         int v = _wtoi(val.c_str());
         if (v >= 100) cfg.refreshMs = v;
+    } else if (key == L"abort_timeout_ms") {
+        int v = _wtoi(val.c_str());
+        if (v >= 100) cfg.abortTimeoutMs = v;
     }
 }
 
@@ -158,6 +161,9 @@ bool SaveConfig(const Config& cfg) {
     out += L"\r\n";
     out += L"[ui]\r\n";
     out += L"refresh_ms=" + std::to_wstring(cfg.refreshMs) + L"\r\n";
+    out += L"\r\n";
+    out += L"[abort]\r\n";
+    out += L"abort_timeout_ms=" + std::to_wstring(cfg.abortTimeoutMs) + L"\r\n";
 
     std::string bytes = WideToUtf8(out);
     const char bom[3] = { static_cast<char>(0xEF), static_cast<char>(0xBB), static_cast<char>(0xBF) };

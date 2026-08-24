@@ -87,6 +87,7 @@ static void PrintConfig() {
     s += L"script_file=" + g_cfg.scriptFile + L"\r\n";
     s += L"run_file=" + g_cfg.runFile + L"\r\n";
     s += L"refresh_ms=" + std::to_wstring(g_cfg.refreshMs) + L"\r\n";
+    s += L"abort_timeout_ms=" + std::to_wstring(g_cfg.abortTimeoutMs) + L"\r\n";
     PrintLine(s);
 }
 

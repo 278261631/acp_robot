@@ -11,3 +11,4 @@ bool RunRunFile(const std::wstring& target, std::wstring& result);
 bool RunRunClick(std::wstring& result);
 bool RunRunFill(std::wstring& result);
 bool RunRunOpen(std::wstring& result);
+bool RunAbort(std::wstring& result);
