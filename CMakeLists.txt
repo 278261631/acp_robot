@@ -20,3 +20,9 @@ add_executable(acp_robot WIN32
 target_compile_options(acp_robot PRIVATE /utf-8)
 
 target_link_libraries(acp_robot PRIVATE user32 gdi32 shell32)
+
+add_custom_command(TARGET acp_robot POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/README.md
+        $<TARGET_FILE_DIR:acp_robot>/README.md
+    COMMENT "Copying README.md to output directory")
