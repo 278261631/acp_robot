@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cwchar>
 #include <cstdio>
+#include <cmath>
 
 #define WM_TRAYICON (WM_APP + 1)
 
@@ -48,10 +49,12 @@ struct Ui {
     HFONT hFont = nullptr;
     NOTIFYICONDATAW nid{};
     bool trayAdded = false;
-    bool firstHide = false;
 };
 
 static Ui g;
+
+static HICON g_hIcon = nullptr;
+static bool g_ownIcon = false;
 
 static std::vector<std::wstring> g_log;
 static int g_abortClicks = 0;
@@ -206,9 +209,93 @@ static void AddTray() {
     g.nid.uID = 1;
     g.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g.nid.uCallbackMessage = WM_TRAYICON;
-    g.nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
+    g.nid.hIcon = g_hIcon;
     wcscpy_s(g.nid.szTip, 128, L"ACP Robot");
     g.trayAdded = Shell_NotifyIconW(NIM_ADD, &g.nid) != FALSE;
+}
+
+static void AddStar(POINT* pts, int& n, int cx, int cy, int R, int r) {
+    const double kPI = 3.14159265358979323846;
+    for (int k = 0; k < 10; ++k) {
+        double ang = (-90.0 + k * 36.0) * kPI / 180.0;
+        int rad = (k % 2 == 0) ? R : r;
+        pts[n].x = cx + (int)(rad * cos(ang) + 0.5);
+        pts[n].y = cy + (int)(rad * sin(ang) + 0.5);
+        ++n;
+    }
+}
+
+static void DrawStars(HDC hdc, int S) {
+    int R, r;
+    int cx[3], cy = 0;
+    if (S >= 32) {
+        R = 7; r = 3; cy = 16;
+        cx[0] = 8; cx[1] = 16; cx[2] = 24;
+    } else {
+        R = 3; r = 1; cy = 8;
+        cx[0] = 4; cx[1] = 8; cx[2] = 12;
+    }
+    for (int i = 0; i < 3; ++i) {
+        POINT pts[10];
+        int n = 0;
+        AddStar(pts, n, cx[i], cy, R, r);
+        Polygon(hdc, pts, 10);
+    }
+}
+
+static HICON CreateStarIcon() {
+    const int S = 32;
+    HDC screen = GetDC(nullptr);
+    if (!screen) return nullptr;
+    HDC cdc = CreateCompatibleDC(screen);
+    HDC mdc = CreateCompatibleDC(screen);
+    HBITMAP cbmp = CreateCompatibleBitmap(screen, S, S);
+    HBITMAP mbmp = CreateBitmap(S, S, 1, 1, nullptr);
+    if (!cdc || !mdc || !cbmp || !mbmp) {
+        if (cdc) DeleteDC(cdc);
+        if (mdc) DeleteDC(mdc);
+        if (cbmp) DeleteObject(cbmp);
+        if (mbmp) DeleteObject(mbmp);
+        ReleaseDC(nullptr, screen);
+        return nullptr;
+    }
+
+    HGDIOBJ oc = SelectObject(cdc, cbmp);
+    HGDIOBJ om = SelectObject(mdc, mbmp);
+
+    RECT rc{ 0, 0, S, S };
+    HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    FillRect(cdc, &rc, black);
+
+    HBRUSH yellow = CreateSolidBrush(RGB(255, 210, 0));
+    HGDIOBJ oldB = SelectObject(cdc, yellow);
+    HGDIOBJ oldP = SelectObject(cdc, GetStockObject(NULL_PEN));
+    DrawStars(cdc, S);
+    SelectObject(cdc, oldP);
+    SelectObject(cdc, oldB);
+    DeleteObject(yellow);
+
+    HBRUSH white = (HBRUSH)GetStockObject(WHITE_BRUSH);
+    FillRect(mdc, &rc, white);
+    HBRUSH mblack = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    HGDIOBJ oldMB = SelectObject(mdc, mblack);
+    DrawStars(mdc, S);
+    SelectObject(mdc, oldMB);
+
+    ICONINFO ii{};
+    ii.fIcon = TRUE;
+    ii.hbmMask = mbmp;
+    ii.hbmColor = cbmp;
+    HICON icon = CreateIconIndirect(&ii);
+
+    SelectObject(cdc, oc);
+    SelectObject(mdc, om);
+    DeleteObject(cbmp);
+    DeleteObject(mbmp);
+    DeleteDC(cdc);
+    DeleteDC(mdc);
+    ReleaseDC(nullptr, screen);
+    return icon;
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -340,10 +427,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_CLOSE:
         ShowWindow(hwnd, SW_HIDE);
-        if (!g.firstHide) {
-            g.firstHide = true;
-            ShowBalloon(L"ACP Robot", L"Still running in the tray. Right-click the icon to exit.");
-        }
         return 0;
 
     case WM_DESTROY:
@@ -351,6 +434,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(hwnd, 2);
         if (g.trayAdded) { Shell_NotifyIconW(NIM_DELETE, &g.nid); g.trayAdded = false; }
         if (g.hFont) { DeleteObject(g.hFont); g.hFont = nullptr; }
+        if (g_ownIcon && g_hIcon) { DestroyIcon(g_hIcon); g_hIcon = nullptr; g_ownIcon = false; }
         PostQuitMessage(0);
         return 0;
     }
@@ -360,15 +444,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 void RunUI(HINSTANCE hInstance, int nCmdShow) {
     g.hInst = hInstance;
 
+    g_hIcon = CreateStarIcon();
+    g_ownIcon = g_hIcon != nullptr;
+    if (!g_hIcon) g_hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
+
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
-    wc.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
+    wc.hIcon = g_hIcon;
     wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.lpszClassName = kWndClass;
-    wc.hIconSm = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
+    wc.hIconSm = g_hIcon;
     RegisterClassExW(&wc);
 
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
