@@ -6,14 +6,30 @@
 
 #include <cstdio>
 
-bool RunSelectScript(const std::wstring& target, std::wstring& result) {
+namespace {
+
+std::wstring Hex(HWND h) {
+    wchar_t buf[32] = {};
+    swprintf_s(buf, L"0x%p", h);
+    return buf;
+}
+
+std::wstring WinTitle(HWND h) {
+    wchar_t buf[256] = {};
+    GetWindowTextW(h, buf, 256);
+    return buf;
+}
+
+} // namespace
+
+static bool RunFileDialogFlow(const std::wstring& buttonLabel, const std::wstring& target, std::wstring& result) {
     result.clear();
     if (target.empty()) {
-        result = L"no script file specified (set script_file in config or pass a path)";
+        result = L"no file specified (set it in config or pass a path)";
         return false;
     }
-    if (!acp::ClickByLabel(g_cfg.btnSelect)) {
-        result = L"failed to click the Select button";
+    if (!acp::ClickByLabel(buttonLabel)) {
+        result = L"failed to click the button: '" + buttonLabel + L"'";
         return false;
     }
     HWND dlg = filedialog::WaitFor(5000);
@@ -21,12 +37,121 @@ bool RunSelectScript(const std::wstring& target, std::wstring& result) {
         result = L"file dialog did not appear within 5s";
         return false;
     }
-    if (!filedialog::SetFileName(dlg, target)) {
-        result = L"failed to set file name in dialog";
+    if (!filedialog::OpenFileInDialog(dlg, target)) {
+        result = L"failed to fill filename and click Open: '" + target + L"'";
         return false;
     }
-    filedialog::Accept(dlg);
-    result = L"submitted script: " + target;
+    result = L"submitted: " + target;
+    return true;
+}
+
+bool RunSelectScript(const std::wstring& target, std::wstring& result) {
+    return RunFileDialogFlow(g_cfg.btnSelect, target, result);
+}
+
+bool RunRunFile(const std::wstring& target, std::wstring& result) {
+    return RunFileDialogFlow(g_cfg.btnRun, target, result);
+}
+
+bool RunRunClick(std::wstring& result) {
+    result.clear();
+
+    HWND form = acp::FindFormWindow();
+    if (!form) {
+        result = L"step1 FAIL: ACP form not found. Lookup: process='" + g_cfg.processName +
+                 L"', class='" + g_cfg.formClass + L"', title='" + g_cfg.formTitle + L"'";
+        return false;
+    }
+
+    AcpButton b;
+    if (!acp::FindButton(g_cfg.btnRun, &b)) {
+        result = L"step1 FAIL: Run button not found in form " + Hex(form) +
+                 L" ('" + WinTitle(form) + L"'). Lookup: class='" + g_cfg.buttonClass +
+                 L"', label='" + g_cfg.btnRun + L"'";
+        return false;
+    }
+    if (!b.visible || !b.enabled) {
+        result = L"step1 FAIL: Run button " + Hex(b.hwnd) + L" not clickable (visible=" +
+                 (b.visible ? L"yes" : L"no") + L", enabled=" + (b.enabled ? L"yes" : L"no") + L")";
+        return false;
+    }
+
+    if (!acp::Click(b.hwnd)) {
+        result = L"step1 FAIL: click message failed on Run button " + Hex(b.hwnd);
+        return false;
+    }
+
+    HWND dlg = filedialog::WaitFor(5000);
+    if (!dlg) {
+        result = L"step1 FAIL: no dialog appeared within 5s after clicking Run button " +
+                 Hex(b.hwnd) + L". Lookup: class='#32770' owned by form " + Hex(form);
+        return false;
+    }
+
+    result = L"step1 OK: form " + Hex(form) + L" ('" + WinTitle(form) + L"') -> Run button " +
+             Hex(b.hwnd) + L" ('" + b.label + L"') clicked -> dialog " + Hex(dlg) + L" appeared";
+    return true;
+}
+
+bool RunRunFill(std::wstring& result) {
+    result.clear();
+
+    HWND dlg = filedialog::Find();
+    if (!dlg) {
+        result = L"step2 FAIL: no file dialog open (run step1 first). Lookup: class='#32770' owned by form";
+        return false;
+    }
+
+    HWND field = filedialog::FindFileNameField(dlg);
+    if (!field) {
+        result = L"step2 FAIL: filename field not found in dialog " + Hex(dlg) +
+                 L". Lookup: class='Edit'/'ComboBox', visible+enabled, id=1148\r\n" +
+                 filedialog::Describe(dlg);
+        return false;
+    }
+
+    std::wstring cls = filedialog::ClassName(field);
+
+    if (!filedialog::SetFileName(dlg, g_cfg.runFile)) {
+        result = L"step2 FAIL: could not set file name in field " + Hex(field) +
+                 L" (class='" + cls + L"') of dialog " + Hex(dlg) +
+                 L". run_file='" + g_cfg.runFile + L"'\r\n" + filedialog::Describe(dlg);
+        return false;
+    }
+
+    result = L"step2 OK: dialog " + Hex(dlg) + L" -> filename field " + Hex(field) +
+             L" (class='" + cls + L"', id=1148) set to run_file='" + g_cfg.runFile + L"'";
+    return true;
+}
+
+bool RunRunOpen(std::wstring& result) {
+    result.clear();
+
+    HWND dlg = filedialog::Find();
+    if (!dlg) {
+        result = L"step3 FAIL: no file dialog open (run step1/step2 first). Lookup: class='#32770' owned by form";
+        return false;
+    }
+
+    HWND open = filedialog::FindOpenButton(dlg);
+    if (!open) {
+        result = L"step3 FAIL: Open button not found in dialog " + Hex(dlg) +
+                 L". Lookup: class='Button', id=1 (IDOK)";
+        return false;
+    }
+
+    if (!PostMessageW(open, BM_CLICK, 0, 0)) {
+        result = L"step3 FAIL: BM_CLICK failed on Open button " + Hex(open);
+        return false;
+    }
+
+    for (int i = 0; i < 15; ++i) {
+        if (!IsWindow(dlg)) break;
+        Sleep(100);
+    }
+
+    result = L"step3 OK: Open button " + Hex(open) + L" (class='Button', id=IDOK) in dialog " +
+             Hex(dlg) + L" clicked" + (IsWindow(dlg) ? L" (dialog still open)" : L" (dialog closed)");
     return true;
 }
 
@@ -36,11 +161,13 @@ bool ExecuteCommand(const std::wstring& verb, const std::wstring& arg, std::wstr
     if (verb == L"select") {
         return RunSelectScript(arg.empty() ? g_cfg.scriptFile : arg, result);
     } else if (verb == L"run") {
-        if (!acp::ClickByLabel(g_cfg.btnRun)) {
-            result = L"button not found or disabled: '" + g_cfg.btnRun + L"'";
-            return false;
-        }
-        result = L"clicked: " + g_cfg.btnRun;
+        return RunRunFile(arg.empty() ? g_cfg.runFile : arg, result);
+    } else if (verb == L"run-click" || verb == L"run-1") {
+        return RunRunClick(result);
+    } else if (verb == L"run-fill" || verb == L"run-2") {
+        return RunRunFill(result);
+    } else if (verb == L"run-open" || verb == L"run-3") {
+        return RunRunOpen(result);
     } else if (verb == L"abort") {
         if (!acp::ClickByLabel(g_cfg.btnAbort)) {
             result = L"button not found or disabled: '" + g_cfg.btnAbort + L"'";
@@ -136,6 +263,10 @@ bool ExecuteCommand(const std::wstring& verb, const std::wstring& arg, std::wstr
         result = L"usage: acp_robot.exe [--select|--run|--abort|--alert|--button <label>|--status|--list|--show-config|--config <path>]\r\n"
                  L"  --select [path]         click Select, fill the file dialog (default script_file), open it\r\n"
                  L"  --select-script [path]  alias of --select\r\n"
+                 L"  --run [path]            click Run, fill the file dialog (default run_file), open it (combined)\r\n"
+                 L"  --run-click             step1: click Run, verify the file dialog appears\r\n"
+                 L"  --run-fill              step2: find the filename edit, fill run_file\r\n"
+                 L"  --run-open              step3: click Open in the file dialog\r\n"
                  L"  --dialog-set <path>     set file name in the open dialog\r\n"
                  L"  --dialog-open           click Open in the open dialog\r\n"
                  L"  --dialog-cancel         click Cancel in the open dialog\r\n"

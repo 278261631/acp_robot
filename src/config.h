@@ -16,6 +16,7 @@ struct Config {
     std::wstring btnAlert = L"Alert";
 
     std::wstring scriptFile = L"AcquireImages.js";
+    std::wstring runFile = L"C:\\Users\\Administrator\\Documents\\ACP Astronomy\\Plans\\1.txt";
 
     int refreshMs = 1000;
 

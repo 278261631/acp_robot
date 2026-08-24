@@ -17,6 +17,10 @@ static const int IDC_STATUS = 1001;
 static const int IDC_DUMP = 1002;
 static const int IDC_REFRESH = 1003;
 static const int IDC_OPENACP = 1004;
+static const int IDC_RUN_CLICK = 1005;
+static const int IDC_RUN_FILL = 1006;
+static const int IDC_RUN_OPEN = 1007;
+static const int IDC_CLEARLOG = 1008;
 static const int IDC_BTN_BASE = 1100;
 static const int IDC_STATE_BASE = 1200;
 static const int IDC_CLICK_BASE = 1300;
@@ -34,6 +38,10 @@ struct Ui {
     HWND hDump = nullptr;
     HWND hOpenAcp = nullptr;
     HWND hRefresh = nullptr;
+    HWND hRunClick = nullptr;
+    HWND hRunFill = nullptr;
+    HWND hRunOpen = nullptr;
+    HWND hClearLog = nullptr;
     HWND hLabel[8] = {};
     HWND hState[8] = {};
     HWND hClick[8] = {};
@@ -45,12 +53,25 @@ struct Ui {
 
 static Ui g;
 
+static std::vector<std::wstring> g_log;
+
 static void OpenAcp();
 static void RefreshUi();
 static void ExitApp();
 static void ShowTrayMenu();
 static void ShowBalloon(const std::wstring& title, const std::wstring& text);
 static void AddTray();
+static void AppendLog(const std::wstring& line);
+
+static void AppendLog(const std::wstring& line) {
+    g_log.push_back(line);
+    while (g_log.size() > 300) g_log.erase(g_log.begin());
+    RefreshUi();
+    if (!g.hDump) return;
+    int len = GetWindowTextLengthW(g.hDump);
+    SendMessageW(g.hDump, EM_SETSEL, len, len);
+    SendMessageW(g.hDump, EM_SCROLLCARET, 0, 0);
+}
 
 static void RefreshUi() {
     SetWindowTextW(g.hStatus, acp::StatusLine().c_str());
@@ -70,6 +91,9 @@ static void RefreshUi() {
     }
 
     std::wstring dump;
+    for (auto& l : g_log) { dump += l; dump += L"\r\n"; }
+
+    std::wstring inv;
     std::vector<AcpButton> btns;
     if (acp::EnumButtons(btns)) {
         for (auto& b : btns) {
@@ -78,12 +102,22 @@ static void RefreshUi() {
                 b.enabled ? L"enabled" : L"disabled",
                 b.visible ? L"vis" : L"hid",
                 b.label.c_str());
-            dump += line;
+            inv += line;
         }
     } else {
-        dump = L"ACP not running or no command buttons found.\r\n";
+        inv = L"ACP not running or no command buttons found.\r\n";
     }
-    SetWindowTextW(g.hDump, dump.c_str());
+
+    std::wstring text;
+    if (!dump.empty()) { text += dump; text += L"\r\n"; }
+    text += L"--- ACP buttons ---\r\n";
+    text += inv;
+
+    static std::wstring last;
+    if (text != last) {
+        last = text;
+        SetWindowTextW(g.hDump, text.c_str());
+    }
 }
 
 static void OpenAcp() {
@@ -165,7 +199,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         g.hFont = CreateFontIndirectW(&ncm.lfMessageFont);
 
         g.hStatus = CreateWindowExW(0, L"STATIC", L"",
-            WS_CHILD | WS_VISIBLE, 10, 10, 540, 20,
+            WS_CHILD | WS_VISIBLE, 10, 10, 850, 20,
             hwnd, (HMENU)(INT_PTR)IDC_STATUS, g.hInst, nullptr);
 
         for (int i = 0; i < TrackedCount(); ++i) {
@@ -184,18 +218,30 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         int dumpY = 40 + TrackedCount() * 32;
         g.hDump = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
-            10, dumpY, 540, 250,
+            10, dumpY, 850, 250,
             hwnd, (HMENU)(INT_PTR)IDC_DUMP, g.hInst, nullptr);
 
         int btnY = dumpY + 250 + 8;
         g.hOpenAcp = CreateWindowExW(0, L"BUTTON", L"Open ACP",
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 10, btnY, 90, 26,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 10, btnY, 110, 26,
             hwnd, (HMENU)(INT_PTR)IDC_OPENACP, g.hInst, nullptr);
         g.hRefresh = CreateWindowExW(0, L"BUTTON", L"Refresh",
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 110, btnY, 90, 26,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 130, btnY, 110, 26,
             hwnd, (HMENU)(INT_PTR)IDC_REFRESH, g.hInst, nullptr);
+        g.hRunClick = CreateWindowExW(0, L"BUTTON", L"1.Run+Verify",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 250, btnY, 140, 26,
+            hwnd, (HMENU)(INT_PTR)IDC_RUN_CLICK, g.hInst, nullptr);
+        g.hRunFill = CreateWindowExW(0, L"BUTTON", L"2.Fill File",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 400, btnY, 140, 26,
+            hwnd, (HMENU)(INT_PTR)IDC_RUN_FILL, g.hInst, nullptr);
+        g.hRunOpen = CreateWindowExW(0, L"BUTTON", L"3.Open Dlg",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 550, btnY, 140, 26,
+            hwnd, (HMENU)(INT_PTR)IDC_RUN_OPEN, g.hInst, nullptr);
+        g.hClearLog = CreateWindowExW(0, L"BUTTON", L"Clear Log",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 710, btnY, 150, 26,
+            hwnd, (HMENU)(INT_PTR)IDC_CLEARLOG, g.hInst, nullptr);
 
-        HWND all[] = { g.hStatus, g.hDump, g.hOpenAcp, g.hRefresh };
+        HWND all[] = { g.hStatus, g.hDump, g.hOpenAcp, g.hRefresh, g.hRunClick, g.hRunFill, g.hRunOpen, g.hClearLog };
         for (HWND h : all) SendMessageW(h, WM_SETFONT, (WPARAM)g.hFont, TRUE);
         for (int i = 0; i < TrackedCount(); ++i) {
             SendMessageW(g.hLabel[i], WM_SETFONT, (WPARAM)g.hFont, TRUE);
@@ -216,13 +262,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         int id = LOWORD(wp);
         if (id == IDC_REFRESH) { RefreshUi(); return 0; }
         if (id == IDC_OPENACP) { OpenAcp(); RefreshUi(); return 0; }
+        if (id == IDC_RUN_CLICK) { std::wstring r; RunRunClick(r); AppendLog(r); RefreshUi(); return 0; }
+        if (id == IDC_RUN_FILL) { std::wstring r; RunRunFill(r); AppendLog(r); RefreshUi(); return 0; }
+        if (id == IDC_RUN_OPEN) { std::wstring r; RunRunOpen(r); AppendLog(r); RefreshUi(); return 0; }
+        if (id == IDC_CLEARLOG) { g_log.clear(); RefreshUi(); return 0; }
         if (id >= IDC_CLICK_BASE && id < IDC_CLICK_BASE + TrackedCount()) {
             int idx = id - IDC_CLICK_BASE;
-            if (idx == 0) {
-                std::wstring r;
-                RunSelectScript(g_cfg.scriptFile, r);
-            } else {
-                acp::ClickByLabel(TrackedLabel(idx));
+            std::wstring r;
+            switch (idx) {
+            case 0: RunSelectScript(g_cfg.scriptFile, r); break;
+            case 1: RunRunFile(g_cfg.runFile, r); break;
+            default: acp::ClickByLabel(TrackedLabel(idx)); break;
             }
             RefreshUi();
             return 0;
@@ -294,7 +344,7 @@ void RunUI(HINSTANCE hInstance, int nCmdShow) {
     RegisterClassExW(&wc);
 
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-    RECT rc{ 0, 0, 560, 460 };
+    RECT rc{ 0, 0, 880, 460 };
     AdjustWindowRectEx(&rc, style, FALSE, 0);
     g.hwnd = CreateWindowExW(0, kWndClass, kWndTitle, style,
         CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
