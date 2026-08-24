@@ -15,6 +15,8 @@ struct Config {
     std::wstring btnAbort = L"Abort";
     std::wstring btnAlert = L"Alert";
 
+    std::wstring scriptFile = L"AcquireImages.js";
+
     int refreshMs = 1000;
 
     std::wstring configPath;

@@ -217,7 +217,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (id == IDC_REFRESH) { RefreshUi(); return 0; }
         if (id == IDC_OPENACP) { OpenAcp(); RefreshUi(); return 0; }
         if (id >= IDC_CLICK_BASE && id < IDC_CLICK_BASE + TrackedCount()) {
-            acp::ClickByLabel(TrackedLabel(id - IDC_CLICK_BASE));
+            int idx = id - IDC_CLICK_BASE;
+            if (idx == 0) {
+                std::wstring r;
+                RunSelectScript(g_cfg.scriptFile, r);
+            } else {
+                acp::ClickByLabel(TrackedLabel(idx));
+            }
             RefreshUi();
             return 0;
         }

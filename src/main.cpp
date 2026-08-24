@@ -84,6 +84,7 @@ static void PrintConfig() {
     s += L"run=" + g_cfg.btnRun + L"\r\n";
     s += L"abort=" + g_cfg.btnAbort + L"\r\n";
     s += L"alert=" + g_cfg.btnAlert + L"\r\n";
+    s += L"script_file=" + g_cfg.scriptFile + L"\r\n";
     s += L"refresh_ms=" + std::to_wstring(g_cfg.refreshMs) + L"\r\n";
     PrintLine(s);
 }

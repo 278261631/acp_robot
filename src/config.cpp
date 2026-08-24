@@ -79,6 +79,7 @@ static void Apply(Config& cfg, const std::wstring& key, const std::wstring& val)
     else if (key == L"run") cfg.btnRun = val;
     else if (key == L"abort") cfg.btnAbort = val;
     else if (key == L"alert") cfg.btnAlert = val;
+    else if (key == L"script_file") cfg.scriptFile = val;
     else if (key == L"refresh_ms") {
         int v = _wtoi(val.c_str());
         if (v >= 100) cfg.refreshMs = v;
@@ -147,6 +148,9 @@ bool SaveConfig(const Config& cfg) {
     out += L"run=" + cfg.btnRun + L"\r\n";
     out += L"abort=" + cfg.btnAbort + L"\r\n";
     out += L"alert=" + cfg.btnAlert + L"\r\n";
+    out += L"\r\n";
+    out += L"[script]\r\n";
+    out += L"script_file=" + cfg.scriptFile + L"\r\n";
     out += L"\r\n";
     out += L"[ui]\r\n";
     out += L"refresh_ms=" + std::to_wstring(cfg.refreshMs) + L"\r\n";
