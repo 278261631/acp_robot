@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to tag this commit with and create a GitHub Release (e.g. v1.0.0). Leave empty to only build + upload the artifact.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -13,6 +18,9 @@ jobs:
   build:
     name: Build Windows Release
     runs-on: windows-latest
+    # Skip the re-run that GitHub fires when we push the tag we just created
+    # (that push is attributed to github-actions[bot]); only build that twice.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.actor != 'github-actions[bot]' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,6 +31,15 @@ jobs:
       - name: Build Release
         run: cmake --build build --config Release
 
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = if ('${{ inputs.tag }}' -ne '') { '${{ inputs.tag }}' } else { $env:GITHUB_REF_NAME }
+          Write-Output "value=$tag"
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
       - name: Stage files
         shell: pwsh
         run: |
@@ -30,8 +47,7 @@ jobs:
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
           Copy-Item 'build\Release\acp_robot.exe' -Destination $dist
           Copy-Item 'README.md' -Destination $dist
-          $version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { 'dev' }
-          Compress-Archive -Path (Join-Path $dist '*') -DestinationPath "$env:RUNNER_TEMP\acp_robot-$version-win64.zip"
+          Compress-Archive -Path (Join-Path $dist '*') -DestinationPath "$env:RUNNER_TEMP\acp_robot-${{ steps.version.outputs.value }}-win64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -39,8 +55,16 @@ jobs:
           name: acp_robot-win64
           path: ${{ runner.temp }}/acp_robot-*.zip
 
+      - name: Create tag for manual release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
+        shell: pwsh
+        run: |
+          git tag "${{ inputs.tag }}"
+          git push origin "${{ inputs.tag }}"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: ${{ runner.temp }}/acp_robot-*.zip
           generate_release_notes: true
