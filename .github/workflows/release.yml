@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows Release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -S . -B build -A x64
+
+      - name: Build Release
+        run: cmake --build build --config Release
+
+      - name: Stage files
+        shell: pwsh
+        run: |
+          $dist = Join-Path $env:RUNNER_TEMP 'dist'
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+          Copy-Item 'build\Release\acp_robot.exe' -Destination $dist
+          Copy-Item 'README.md' -Destination $dist
+          $version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { 'dev' }
+          Compress-Archive -Path (Join-Path $dist '*') -DestinationPath "$env:RUNNER_TEMP\acp_robot-$version-win64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: acp_robot-win64
+          path: ${{ runner.temp }}/acp_robot-*.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/acp_robot-*.zip
+          generate_release_notes: true
